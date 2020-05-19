@@ -116,6 +116,30 @@ class Imaging:
         # return the results
         return results[0] if results else None
 
+    """PATCH for UKBB - since no hash will need to check if file
+    already registered based on file path only, hence this added function"""
+    def grep_file_id_from_file_path(self, file_path):
+        """
+        Greps the file ID from the files table. If it cannot be found, the method ]
+        will return None.
+
+        :param file_path: path to the file
+         :type file_path: str
+
+        :return: file ID and file path
+         :rtype: int
+        """
+
+        query = "SELECT f.FileID, f.File "     \
+                "FROM files AS f "     \
+                "WHERE f.File=%s"
+
+        results = self.db.pselect(query=query, args=(file_path,))
+
+        # return the results
+        return results[0] if results else None
+    """END PATCH"""
+
     def insert_imaging_file(self, file_info, file_data):
         """
         Inserts the imaging file and its information into the files and parameter_file tables.

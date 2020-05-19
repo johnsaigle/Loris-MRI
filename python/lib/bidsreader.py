@@ -10,6 +10,8 @@ import json
 
 import lib.exitcode
 import lib.utilities as utilities
+
+"""PATCH for UKBB - do not use pybids.
 try:
     from bids.layout import BIDSLayout
 except ImportError:
@@ -18,6 +20,7 @@ except ImportError:
     except ImportError:
         print("Could not find bids.layout or bids.grabbids")
         exit(lib.exitcode.INVALID_IMPORT)
+END PATCH"""
 
 __license__ = "GPLv3"
 
@@ -36,7 +39,7 @@ class BidsReader:
         bids_reader = BidsReader(bids_dir)
     """
 
-    def __init__(self, bids_dir, verbose):
+    def __init__(self, bids_dir, csv_file, verbose):
         """
         Constructor method for the BidsReader class.
 
@@ -48,15 +51,23 @@ class BidsReader:
 
         self.verbose     = verbose
         self.bids_dir    = bids_dir
+        """PATCH for UKBB - grep the csv_file"""
+        self.csv_file    = csv_file
+        """END PATCH"""
+
         self.bids_layout = self.load_bids_data()
 
         # load dataset name and BIDS version
+        """PATCH for UKBB - I guess there won't be any dataset_desc file
+        so skip this
+        
         dataset_json = bids_dir + "/dataset_description.json"
         dataset_description = {}
         with open(dataset_json) as json_file:
             dataset_description = json.load(json_file)
         self.dataset_name = dataset_description['Name']
         self.bids_version = dataset_description['BIDSVersion']
+        END PATCH"""
 
         # load BIDS candidates information
         self.participants_info = self.load_candidates_from_bids()
@@ -67,8 +78,10 @@ class BidsReader:
         # load BIDS modality information
         self.cand_session_modalities_list = self.load_modalities_from_bids()
 
+        """PATCH for UKBB - no need to load derivatives
         # grep the derivatives
         self.derivatives_list = self.load_derivatives_from_bids()
+        END PATCH"""
 
     def load_bids_data(self):
         """
@@ -78,17 +91,58 @@ class BidsReader:
         :return: bids structure
         """
 
+        """PATCH for UKBB - do not use pybids to read the directory structure
+    
         if self.verbose:
             print('Loading the BIDS dataset with BIDS layout library...\n')
 
-        bids_config = os.environ['LORIS_MRI'] + "/python/lib/bids.json"
+        # PATCH for UKBB: Hardcode the bids config path. LORIS_MRI is not initialized
+        # properly because the full install was not run; only the python tools are operational.
+        bids_config = '/data/loris/loris-mri/python/lib/bids.json'
+        #bids_config = os.environ['LORIS_MRI'] + "/python/lib/bids.json"
         exclude_arr = ['/code/', '/sourcedata/', '/log/', '.git/']
-        bids_layout = BIDSLayout(root=self.bids_dir, config=bids_config, ignore=exclude_arr)
+        bids_layout = BIDSLayout(root=self.bids_dir, index_metadata=False, ignore=exclude_arr)
 
         if self.verbose:
             print('\t=> BIDS dataset loaded with BIDS layout\n')
 
         return bids_layout
+        END PATCH"""
+
+        """CM: write something to read the TSV file instead.
+        TSV = participant_id,visit_label,modality,scan_type,nifti_file_path,json_file_path
+        
+        Ideal would be to read the TSV file and create a list of dict out of it as 
+        follows:
+        [
+            {
+                'nifti_file_path': <path_to_the_nifti_file>,
+                'json_file_path' : <path_to_the_json_file>,
+                'participant_id' : <UKBB-PSCID>,
+                'visit_label'    : <visit_label>,
+                'modality'       : <modality>,  ## aka anat,
+                'scan_type'      : <scantype>  ## aka T1w, T2w, FLAIR...
+            },
+            { 
+                'nifti_file_path': <path_to_the_nifti_file>,
+                'json_file_path' : <path_to_the_json_file>,
+                'participant_id' : <UKBB-PSCID>,
+                'visit_label'    : <visit_label>,
+                'modality'       : <modality>,  ## aka anat,
+                'scan_type'      : <scantype>  ## aka T1w, T2w, FLAIR...
+            }
+            ...
+        ]
+        
+        with open('names.csv', newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+        """
+        bids_list = []
+        with open(self.csv_file, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            bids_list.append(reader)
+
+        return bids_list
 
     def load_candidates_from_bids(self):
         """
@@ -103,15 +157,28 @@ class BidsReader:
             print('Grepping candidates from the BIDS layout...')
 
         # grep the participant.tsv file and parse it
-        participants_info = None
-        for file in self.bids_layout.get(suffix='participants', return_type='filename'):
-            # note file[0] returns the path to participants.tsv
-            if 'participants.tsv' in file:
-                participants_info = utilities.read_tsv_file(file)
-            else:
-                continue
+        """PATCH for UKBB - read CSV instead of using pybidsi"""
+        # participants_info = None
+        # for file in self.bids_layout.get(suffix='participants', return_type='filename'):
+        #     # note file[0] returns the path to participants.tsv
+        #     if 'participants.tsv' in file:
+        #         participants_info = utilities.read_tsv_file(file)
+        #     else:
+        #         continue
+        #
+        # self.candidates_list_validation(participants_info)
+        #
 
-        self.candidates_list_validation(participants_info)
+        participants_info_list = []
+        for file_dict in self.bids_layout:
+            participant_dict = {
+                'participant_id': file_dict['participant_id']
+            }
+            participants_info_list.append(participant_dict)
+
+        # this should ensure that there are no duplication of participants in the list of participants
+        participants_info = list(set(val for dic in participants_info_list for val in dic.values()))
+        """END PATCH"""
 
         if self.verbose:
             print('\t=> List of participants found:')
@@ -171,9 +238,29 @@ class BidsReader:
 
         cand_sessions = {}
 
+        """PATCH for UKBB - read CSV instead of using pybids"""
+        # for row in self.participants_info:
+        #     ses = self.bids_layout.get_sessions(subject=row['participant_id'])
+        #     """PATCH for UKBB: Convert session IDs. This is to create Visit_labels
+        #     that will match those used in LORIS.
+        #     Later, these will be converted back so that the folder structure in LORIS will
+        #     match the original folder structure in squashfs.
+        #         '2' = 'img'
+        #         '3' = 'irep1'
+        #     ses[:] = ['img' if x=='2' else 'irep1' if x=='3' else x for x in ses]
+        #     END PATCH """
+        #     cand_sessions[row['participant_id']] = ses
+
         for row in self.participants_info:
-            ses = self.bids_layout.get_sessions(subject=row['participant_id'])
-            cand_sessions[row['participant_id']] = ses
+            participant_id = row['participant_id']
+            visit_list     = []
+            for csv_dict in self.bids_layout:
+                if csv_dict['participant_id'] != participant_id:
+                    continue
+                if csv_dict['visit_label'] not in visit_list:
+                    visit_list.append(csv_dict['visit_label'])
+            cand_sessions[row['participant_id']] = visit_list
+        """END PATCH"""
 
         if self.verbose:
             print('\t=> List of sessions found:\n')
@@ -200,19 +287,37 @@ class BidsReader:
 
         cand_session_modalities_list = []
 
-        for subject, visit_list in self.cand_sessions_list.items():
-            cand_session_dict = {'bids_sub_id': subject}
-            if visit_list:
-                for visit in visit_list:
-                    cand_session_dict['bids_ses_id'] = visit
-                    modalities = self.bids_layout.get_datatype(subject=subject, session=visit)
-                    cand_session_dict['modalities'] = modalities
-            else:
-                cand_session_dict['bids_ses_id'] = None
-                modalities = self.bids_layout.get_datatype(subject=subject)
-                cand_session_dict['modalities'] = modalities
+        """CM: TODO: will modify this to parse the TSV file and grep visit labels for each participant"""
 
-            cand_session_modalities_list.append(cand_session_dict)
+        """PATCH for UKBB - read CSV instead of using pybids"""
+        # for subject, visit_list in self.cand_sessions_list.items():
+        #     print(visit_list)
+        #     cand_session_dict = {'bids_sub_id': subject}
+        #     if visit_list:
+        #         for visit in visit_list:
+        #             cand_session_dict['bids_ses_id'] = visit
+        #             modalities = self.bids_layout.get_datatype(subject=subject, session=visit)
+        #             cand_session_dict['modalities'] = modalities
+        #     else:
+        #         cand_session_dict['bids_ses_id'] = None
+        #         modalities = self.bids_layout.get_datatype(subject=subject)
+        #         cand_session_dict['modalities'] = modalities
+        #
+        #     cand_session_modalities_list.append(cand_session_dict)
+
+        for subject, visit_list in self.cand_sessions_list.items():
+            print(visit_list)
+            cand_session_dict = {'bids_sub_id': subject}
+            for visit in visit_list:
+                cand_session_dict['bids_ses_id'] = visit
+                modalities_list = []
+                for csv_dict in self.bids_layout:
+                    if csv_dict['participant_id'] != subject and csv_dict['visit_label'] != visit:
+                        continue
+                    if csv_dict['modality'] not in modalities_list:
+                        modalities_list.append(csv_dict['modality'])
+                cand_session_dict['modalities'] = modalities_list
+        """END PATCH"""
 
         if self.verbose:
             print('\t=> Done grepping the different modalities from the BIDS layout\n')

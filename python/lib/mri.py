@@ -125,9 +125,11 @@ class Mri:
 
         # check if a tsv with acquisition dates or age is available for the subject
         self.scans_file = None
-        if self.bids_layout.get(suffix='scans', subject=self.psc_id, return_type='filename'):
-            self.scans_file = \
-            self.bids_layout.get(suffix='scans', subject=self.psc_id, return_type='filename')[0]
+        """PATCH for UKBB - I guess this info is not available in the BIDS dataset so commenting out"""
+        # if self.bids_layout.get(suffix='scans', subject=self.psc_id, return_type='filename'):
+        #     self.scans_file = \
+        #     self.bids_layout.get(suffix='scans', subject=self.psc_id, return_type='filename')[0]
+        """END PATCH"""
 
         # loop through NIfTI files and register them in the DB
         for nifti_file in self.nifti_files:
@@ -160,6 +162,16 @@ class Mri:
         # check if there are any visit label in BIDS structure, if not,
         # will use the default visit label set in the config module
         visit_label = self.bids_ses_id if self.bids_ses_id else self.default_vl
+        """PATCH for UKBB: Convert custom Visit_label back to raw numerical values
+        so that the folder structure will match squashfs.
+                '2' = 'img'
+                '3' = 'irep1'
+        """
+        if visit_label == '2':
+            visit_label = 'img'
+        elif visit_label == '3':
+            visit_label = 'irep1'
+        """END PATCH"""
 
         session = Session(
             verbose     = self.verbose,
@@ -214,21 +226,33 @@ class Mri:
          :rtype: list
         """
 
-        if self.bids_ses_id:
-            return self.bids_layout.get(
-                subject     = self.bids_sub_id,
-                session     = self.bids_ses_id,
-                datatype    = self.bids_modality,
-                extension   = extension,
-                suffix      = bids_type
-            )
-        else:
-            return self.bids_layout.get(
-                subject     = self.bids_sub_id,
-                datatype    = self.bids_modality,
-                extension   = extension,
-                suffix      = bids_type
-            )
+        """PATCH FOR UKBB - instead of using pybids, grep list of files from TSV dictionary"""
+        # if self.bids_ses_id:
+        #     return self.bids_layout.get(
+        #         subject     = self.bids_sub_id,
+        #         session     = self.bids_ses_id,
+        #         datatype    = self.bids_modality,
+        #         extension   = extension,
+        #         suffix      = bids_type
+        #     )
+        # else:
+        #     return self.bids_layout.get(
+        #         subject     = self.bids_sub_id,
+        #         datatype    = self.bids_modality,
+        #         extension   = extension,
+        #         suffix      = bids_type
+        #     )
+
+        files = []
+        for file_dict in self.bids_layout:
+            sub_id = file_dict['participant_id']
+            ses_id = file_dict['visit_label']
+            mod    = file_dict['modality']
+            if sub_id != self.bids_sub_id and ses_id != self.bids_ses_id and mod != self.bids_modality:
+                continue
+            files.append(file_dict)
+
+        """END PATCH"""
 
     def register_raw_file(self, nifti_file):
         """
@@ -241,8 +265,7 @@ class Mri:
         # insert the NIfTI file
         inserted_nii  = self.fetch_and_insert_nifti_file(nifti_file)
 
-
-    def fetch_and_insert_nifti_file(self, nifti_file, derivatives=None):
+    def fetch_and_insert_nifti_file(self, file_dict, derivatives=None):
         """
         Gather NIfTI file information to insert into the files and parameter_file tables.
         Once all the information has been gathered, it will call imaging.insert_imaging_file
@@ -260,32 +283,35 @@ class Mri:
         # load the Imaging object that will be used to insert the imaging data into the database
         imaging = Imaging(self.db, self.verbose)
 
-        # load the list of associated files with the NIfTI file
-        associated_files = nifti_file.get_associations()
+        """PATCH for UKBB - instead of using pybids to get file info, use info we had from CSV"""
+        # load the nifti file
+        nifti_file       = file_dict['nifti_file_path']
+        #associated_files = file_dict['json_file_path']
 
         # load the entity information from the NIfTI file
-        entities  = nifti_file.get_entities()
-        scan_type = entities['suffix']
-        run       = entities['run']         if 'run' in entities         else None
-        task      = entities['task']        if 'task' in entities        else None
-        acq       = entities['acquisition'] if 'acquisition' in entities else None
-        dir       = entities['dir']         if 'dir' in entities         else None
+        #entities  = nifti_file.get_entities()
+        scan_type = file_dict['scan_type']
+        # run       = entities['run']         if 'run' in entities         else None
+        # task      = entities['task']        if 'task' in entities        else None
+        # acq       = entities['acquisition'] if 'acquisition' in entities else None
+        # dir       = entities['dir']         if 'dir' in entities         else None
 
         # loop through the associated files to grep JSON, bval, bvec...
-        json_file = None
-        other_assoc_files = {}
-        for assoc_file in associated_files:
-            file_info = assoc_file.get_entities()
-            if file_info['extension'] == 'json':
-                json_file = assoc_file.path
-            elif file_info['extension'] == 'bvec':
-                other_assoc_files['bvec_file'] = assoc_file.path
-            elif file_info['extension'] == 'bval':
-                other_assoc_files['bval_file'] = assoc_file.path
-            elif file_info['extension'] == 'tsv' and file_info['suffix'] == 'events':
-                other_assoc_files['task_file'] = assoc_file.path
-            elif file_info['extension'] == 'tsv' and file_info['suffix'] == 'physio':
-                other_assoc_files['physio_file'] = assoc_file.path
+        #json_file = None
+        # no other associated files for UKBB
+        # other_assoc_files = {}
+        # for assoc_file in associated_files:
+        #     file_info = assoc_file.get_entities()
+        #     if file_info['extension'] == 'json':
+        #         json_file = assoc_file.path
+        #     elif file_info['extension'] == 'bvec':
+        #         other_assoc_files['bvec_file'] = assoc_file.path
+        #     elif file_info['extension'] == 'bval':
+        #         other_assoc_files['bval_file'] = assoc_file.path
+        #     elif file_info['extension'] == 'tsv' and file_info['suffix'] == 'events':
+        #         other_assoc_files['task_file'] = assoc_file.path
+        #     elif file_info['extension'] == 'tsv' and file_info['suffix'] == 'physio':
+        #         other_assoc_files['physio_file'] = assoc_file.path
 
         # read the json file if it exists
         file_parameters = {}
@@ -294,13 +320,20 @@ class Mri:
                 file_parameters = json.load(data_file)
                 file_parameters = imaging.map_bids_param_to_loris_param(file_parameters)
             # copy the JSON file to the LORIS BIDS import directory
+            """PATCH for UKBB - do not copy file locally
             json_path = self.copy_file_to_loris_bids_dir(json_file)
             file_parameters['bids_json_file'] = json_path
+            """
+            file_parameters['bids_json_file'] = file_dict['json_file_path']
+            """END PATCH"""
+            """ PATCH for UKBB - this should probably be commented as if no access to file
+            system then cannot compute the file hash
             json_blake2 = blake2b(json_file.encode('utf-8')).hexdigest()
             file_parameters['bids_json_file_blake2b_hash'] = json_blake2
+            END PATCH"""
 
         # grep the file type from the ImagingFileTypes table
-        file_type = imaging.determine_file_type(nifti_file.filename)
+        file_type = imaging.determine_file_type(nifti_file)
 
         # determine the output type
         output_type = 'derivatives' if derivatives else 'native'
@@ -313,43 +346,60 @@ class Mri:
             file_parameters['scan_acquisition_time'] = scan_info.get_acquisition_time()
             file_parameters['age_at_scan'] = scan_info.get_age_at_scan()
             # copy the scans.tsv file to the LORIS BIDS import directory
+            """PATCH for UKBB - do not make local copy of TSV
             scans_path = scan_info.copy_scans_tsv_file_to_loris_bids_dir(
                 self.bids_sub_id, self.loris_bids_root_dir, self.data_dir
             )
             file_parameters['scans_tsv_file'] = scans_path
+            """
+            file_parameters['scans_tsv_file'] = ''
+            """END PATCH"""
             scans_blake2 = blake2b(self.scans_file.encode('utf-8')).hexdigest()
             file_parameters['scans_tsv_file_bake2hash'] = scans_blake2
 
         # grep voxel step from the NIfTI file header
-        step_parameters = imaging.get_nifti_image_step_parameters(nifti_file.path)
+        step_parameters = imaging.get_nifti_image_step_parameters(nifti_file)
         file_parameters['xstep'] = step_parameters[0]
         file_parameters['ystep'] = step_parameters[1]
         file_parameters['zstep'] = step_parameters[2]
 
         # grep the time length from the NIfTI file header
         is_4d_dataset = False
-        length_parameters = imaging.get_nifti_image_length_parameters(nifti_file.path)
+        length_parameters = imaging.get_nifti_image_length_parameters(nifti_file)
         if len(length_parameters) == 4:
             file_parameters['time'] = length_parameters[3]
             is_4d_dataset = True
 
-        # add all other associated files to the file_parameters so they get inserted
-        # in parameter_file
-        for type in other_assoc_files:
-            original_file_path = other_assoc_files[type]
-            copied_path = self.copy_file_to_loris_bids_dir(original_file_path)
-            file_param_name  = 'bids_' + type
-            file_parameters[file_param_name] = copied_path
-            file_blake2 = blake2b(original_file_path.encode('utf-8')).hexdigest()
-            hash_param_name = file_param_name + '_blake2b_hash'
-            file_parameters[hash_param_name] = file_blake2
-
-        # append the blake2b to the MRI file parameters dictionary
-        blake2 = blake2b(nifti_file.path.encode('utf-8')).hexdigest()
-        file_parameters['file_blake2b_hash'] = blake2
+        """PATCH for UKBB - not relevant since there are no associated files other than JSON above 
+        + we won't have access to the file system anyway to compute a hash for the file"""
+        # # add all other associated files to the file_parameters so they get inserted
+        # # in parameter_file
+        # for type in other_assoc_files:
+        #     original_file_path = other_assoc_files[type]
+        #     """PATCH for UKBB -- do not copy file to local filesystem
+        #     copied_path = self.copy_file_to_loris_bids_dir(original_file_path)
+        #     """
+        #     file_param_name  = 'bids_' + type
+        #     """PATCH for UKBB -- use original path
+        #     file_parameters[file_param_name] = copied_path
+        #     """
+        #     file_parameters[file_param_name] = original_file_path
+        #     """END PATCH"""
+        #     file_blake2 = blake2b(original_file_path.encode('utf-8')).hexdigest()
+        #     hash_param_name = file_param_name + '_blake2b_hash'
+        #     tfile_parameters[hash_param_name] = file_blake2
+        #
+        # # append the blake2b to the MRI file parameters dictionary
+        # blake2 = blake2b(nifti_file.path.encode('utf-8')).hexdigest()
+        # file_parameters['file_blake2b_hash'] = blake2
+        """END PATCH"""
 
         # check that the file is not already inserted before inserting it
-        result    = imaging.grep_file_id_from_hash(blake2)
+        """ PATCH for UKBB -
+        no hash computed so check if file already inserted based on file path"""
+        #result    = imaging.grep_file_id_from_hash(blake2)
+        result    = imaging.grep_file_id_from_file_path(nifti_file)
+        """END PATCH"""
         file_id   = result['FileID'] if result else None
         file_path = result['File']   if result else None
         if not file_id:
@@ -364,7 +414,11 @@ class Mri:
             )
 
             # copy the NIfTI file to the LORIS BIDS import directory
+            """PATCH for UKBB - do not make a local copy of the file.""
             file_path = self.copy_file_to_loris_bids_dir(nifti_file.path)
+            """
+            file_path = nifti_file
+            """END PATCH """
 
             # insert the file along with its information into files and parameter_file tables
             file_info = {
@@ -380,6 +434,8 @@ class Mri:
             file_id = imaging.insert_imaging_file(file_info, file_parameters)
 
             # create the pic associated with the file
+            """PATCH for UKBB - skip pic creation for now. Apparently we already
+            have these. This should be changed later to point to their location.
             pic_rel_path = imaging.create_imaging_pic(
                 {
                     'cand_id'      : self.cand_id,
@@ -393,6 +449,7 @@ class Mri:
             if os.path.exists(self.data_dir + 'pic/' + pic_rel_path):
                 print("INNNN")
                 imaging.insert_parameter_file(file_id, 'check_pic_filename', pic_rel_path)
+            END PATCH"""
 
         return {'file_id': file_id, 'file_path': file_path}
 

@@ -30,9 +30,11 @@ def main():
     createcand  = False
     createvisit = False
     profile     = ''
+    csv_file    = ''
 
+    """PATCH for UKBB - add an option to provide the list CSV file"""
     long_options = [
-        "help",            "profile=",      "directory=",
+        "help",            "profile=",      "directory=", "list_csv_file",
         "createcandidate", "createsession", "verbose"
     ]
     usage        = (
@@ -44,11 +46,15 @@ def main():
         '\t-d, --directory      : BIDS directory to parse & insert into LORIS\n'
         '\t-c, --createcandidate: to create BIDS candidates in LORIS (optional)\n'
         '\t-s, --createsession  : to create BIDS sessions in LORIS (optional)\n'
+        '\t-l, --list_csv_file  : CSV file listing files that need to be inserted\n'
         '\t-v, --verbose        : be verbose\n'
+        
+        '\nNote: CSV file content should have the following column headers:\n'
+        ' participant_id,visit_label,modality,scan_type,nifti_file_path,json_file_path\n'
     )
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'hp:d:csv', long_options)
+        opts, args = getopt.getopt(sys.argv[1:], 'hp:d:l:csv', long_options)
     except getopt.GetoptError as err:
         print(usage)
         sys.exit(lib.exitcode.GETOPT_FAILURE)
@@ -58,7 +64,10 @@ def main():
             print(usage)
             sys.exit()
         elif opt in ('-p', '--profile'):
-            profile = os.environ['LORIS_CONFIG'] + "/.loris_mri/" + arg
+            # Quick and dirty patch because there is no LORIS-MRI full install:
+            # hard-code the path
+            profile = '/data/loris/loris-mri/dicom-archive/database_config_template.py'
+            #profile = os.environ['LORIS_CONFIG'] + "/.loris_mri/" + arg
         elif opt in ('-d', '--directory'):
             bids_dir = arg
         elif opt in ('-v', '--verbose'):
@@ -67,12 +76,18 @@ def main():
             createcand = True
         elif opt in ('-s', '--createsession'):
             createvisit = True
-
+        elif opt in ('-l', '--list_csv_file'):
+            csv_file = arg
+    """
+    END PATCH"""
     # input error checking and load config_file file
     config_file = input_error_checking(profile, bids_dir, usage)
 
     # read and insert BIDS data
-    read_and_insert_bids(bids_dir, config_file, verbose, createcand, createvisit)
+    """PATCH for UKBB - provide the csv_file path to read_and_insert_bids function"""
+    read_and_insert_bids(bids_dir, config_file, verbose, createcand, createvisit, csv_file)
+    """
+    END PATCH"""
 
 
 def input_error_checking(profile, bids_dir, usage):
@@ -126,7 +141,7 @@ def input_error_checking(profile, bids_dir, usage):
     return config_file
 
 
-def read_and_insert_bids(bids_dir, config_file, verbose, createcand, createvisit):
+def read_and_insert_bids(bids_dir, config_file, verbose, createcand, createvisit, csv_file):
     """
     Read the provided BIDS structure and import it into the database.
 
@@ -140,6 +155,8 @@ def read_and_insert_bids(bids_dir, config_file, verbose, createcand, createvisit
      :type createcand : bool
     :param createvisit: allow database visit creation if it did not exist already
      :type createvisit: bool
+    :param csv_file   : CSV summary file with list of files to insert and related info for UKBB
+     :type csv_file   : str
     """
 
     # database connection
@@ -154,7 +171,10 @@ def read_and_insert_bids(bids_dir, config_file, verbose, createcand, createvisit
     data_dir = data_dir if data_dir.endswith('/') else data_dir + "/"
 
     # load the BIDS directory
+    """ PATCH for UKBB - add the csv_filepath to the call to BidsReader
     bids_reader = BidsReader(bids_dir, verbose)
+    END PATCH"""
+    bids_reader = BidsReader(bids_dir, csv_file, verbose)
     if not bids_reader.participants_info          \
             or not bids_reader.cand_sessions_list \
             or not bids_reader.cand_session_modalities_list:
@@ -164,9 +184,12 @@ def read_and_insert_bids(bids_dir, config_file, verbose, createcand, createvisit
         sys.exit(lib.exitcode.UNREADABLE_FILE)
 
     # create the LORIS_BIDS directory in data_dir based on Name and BIDS version
+    """ PATCH for UKBB - do not create loris bids directory.
     loris_bids_root_dir = create_loris_bids_directory(
         bids_reader, data_dir, verbose
     )
+    END PATCH"""
+    loris_bids_root_dir = ''
 
     # loop through subjects
     for bids_subject_info in bids_reader.participants_info:
@@ -197,10 +220,12 @@ def read_and_insert_bids(bids_dir, config_file, verbose, createcand, createvisit
     for row in bids_reader.cand_session_modalities_list:
         bids_session = row['bids_ses_id']
         visit_label  = bids_session if bids_session else default_bids_vl
-        loris_bids_visit_rel_dir    = 'sub-' + row['bids_sub_id'] + '/' + 'ses-' + visit_label
+        loris_bids_visit_rel_dir = 'sub-' + row['bids_sub_id'] + '/' + 'ses-' + visit_label
         for modality in row['modalities']:
             loris_bids_modality_rel_dir = loris_bids_visit_rel_dir + '/' + modality + '/'
+            """PATCH for UKBB - do not create local copies of BIDS files
             lib.utilities.create_dir(loris_bids_root_dir + loris_bids_modality_rel_dir, verbose)
+            END PATCH"""
 
             if modality == 'eeg':
                 Eeg(
@@ -326,7 +351,9 @@ def grep_or_create_candidate_db_info(bids_reader, bids_id,        db,
         )
 
     # create the candidate's directory in the LORIS BIDS import directory
+    """PATCH for UKBB - Do not create LORIS BIDS dir
     lib.utilities.create_dir(loris_bids_dir + "sub-" + bids_id, verbose)
+    END PATCH"""
 
     return loris_cand_info
 
@@ -368,10 +395,12 @@ def grep_or_create_visit_label_db_info(
 
     # create the visit directory for in the candidate folder of the LORIS
     # BIDS import directory
+    """PATCH for UKBB: - Do not create LORIS BIDS dir
     lib.utilities.create_dir(
         loris_bids_dir + "sub-" + bids_id + "/ses-" + visit_label,
         verbose
     )
+    """
 
     return loris_vl_info
 
