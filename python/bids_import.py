@@ -58,7 +58,10 @@ def main():
             print(usage)
             sys.exit()
         elif opt in ('-p', '--profile'):
-            profile = os.environ['LORIS_CONFIG'] + "/.loris_mri/" + arg
+            # Quick and dirty patch because there is no LORIS-MRI full install:
+            # hard-code the path
+            profile = '/data/loris/loris-mri/dicom-archive/database_config_template.py'
+            #profile = os.environ['LORIS_CONFIG'] + "/.loris_mri/" + arg
         elif opt in ('-d', '--directory'):
             bids_dir = arg
         elif opt in ('-v', '--verbose'):
@@ -164,9 +167,12 @@ def read_and_insert_bids(bids_dir, config_file, verbose, createcand, createvisit
         sys.exit(lib.exitcode.UNREADABLE_FILE)
 
     # create the LORIS_BIDS directory in data_dir based on Name and BIDS version
+    """ PATCH for UKBB - do not create loris bids directory.
     loris_bids_root_dir = create_loris_bids_directory(
         bids_reader, data_dir, verbose
     )
+    END PATCH"""
+    loris_bids_root_dir = ''
 
     # loop through subjects
     for bids_subject_info in bids_reader.participants_info:
@@ -200,7 +206,9 @@ def read_and_insert_bids(bids_dir, config_file, verbose, createcand, createvisit
         loris_bids_visit_rel_dir    = 'sub-' + row['bids_sub_id'] + '/' + 'ses-' + visit_label
         for modality in row['modalities']:
             loris_bids_modality_rel_dir = loris_bids_visit_rel_dir + '/' + modality + '/'
+            """PATCH for UKBB - do not create local copies of BIDS files
             lib.utilities.create_dir(loris_bids_root_dir + loris_bids_modality_rel_dir, verbose)
+            END PATCH"""
 
             if modality == 'eeg':
                 Eeg(
@@ -326,7 +334,9 @@ def grep_or_create_candidate_db_info(bids_reader, bids_id,        db,
         )
 
     # create the candidate's directory in the LORIS BIDS import directory
+    """PATCH for UKBB - Do not create LORIS BIDS dir
     lib.utilities.create_dir(loris_bids_dir + "sub-" + bids_id, verbose)
+    END PATCH"""
 
     return loris_cand_info
 
@@ -368,6 +378,16 @@ def grep_or_create_visit_label_db_info(
 
     # create the visit directory for in the candidate folder of the LORIS
     # BIDS import directory
+    """PATCH for UKBB: Convert custom Visit_label back to raw numerical values
+    so that the folder structure will match squashfs.
+            '2' = 'img'
+            '3' = 'irep1'
+    """
+    if visit_label == 'img':
+        visit_label = '2'
+    elif visit_label == 'irep1':
+        visit_label = '3'
+    """END PATCH"""
     lib.utilities.create_dir(
         loris_bids_dir + "sub-" + bids_id + "/ses-" + visit_label,
         verbose

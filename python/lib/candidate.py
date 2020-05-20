@@ -144,7 +144,9 @@ class Candidate:
 
         loris_cand_info = db.pselect(
             "SELECT * FROM candidate WHERE PSCID = %s",
-            (self.psc_id,),
+            # PATCH Use UKBB as a prefix for the PSCID
+            ('UKBB' + self.psc_id,),
+            #(self.psc_id,),
         )
 
         return loris_cand_info[0] if loris_cand_info else None

@@ -48,6 +48,7 @@ class Session:
         self.verbose = verbose
 
         self.cand_id     = str(cand_id)
+        print('INIT CANDID IS: ' + self.cand_id)
         self.visit_label = visit_label
         self.center_id   = center_id
 
@@ -87,6 +88,11 @@ class Session:
         :return: dictionary with session info from the session's table
          :rtype: dict
         """
+        if self.visit_label == '2':
+            self.visit_label = 'img'
+        elif self.visit_label == '3':
+            self.visit_label = 'irep1'
+        print ('CANDID is: ' + self.cand_id + '. VL IS: ' + self.visit_label)
 
         loris_session_info = db.pselect(
             "SELECT * FROM session WHERE CandID = %s AND Visit_label = %s",

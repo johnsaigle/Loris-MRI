@@ -160,6 +160,16 @@ class Mri:
         # check if there are any visit label in BIDS structure, if not,
         # will use the default visit label set in the config module
         visit_label = self.bids_ses_id if self.bids_ses_id else self.default_vl
+        """PATCH for UKBB: Convert custom Visit_label back to raw numerical values
+        so that the folder structure will match squashfs.
+                '2' = 'img'
+                '3' = 'irep1'
+        """
+        if visit_label == '2':
+            visit_label = 'img'
+        elif visit_label == '3':
+            visit_label = 'irep1'
+        """END PATCH"""
 
         session = Session(
             verbose     = self.verbose,
@@ -294,8 +304,12 @@ class Mri:
                 file_parameters = json.load(data_file)
                 file_parameters = imaging.map_bids_param_to_loris_param(file_parameters)
             # copy the JSON file to the LORIS BIDS import directory
+            """PATCH for UKBB - do not copy file locally
             json_path = self.copy_file_to_loris_bids_dir(json_file)
             file_parameters['bids_json_file'] = json_path
+            """
+            file_parameters['bids_json_file'] = '' # what should this value be?
+            """END PATCH"""
             json_blake2 = blake2b(json_file.encode('utf-8')).hexdigest()
             file_parameters['bids_json_file_blake2b_hash'] = json_blake2
 
@@ -313,10 +327,14 @@ class Mri:
             file_parameters['scan_acquisition_time'] = scan_info.get_acquisition_time()
             file_parameters['age_at_scan'] = scan_info.get_age_at_scan()
             # copy the scans.tsv file to the LORIS BIDS import directory
+            """PATCH for UKBB - do not make local copy of TSV
             scans_path = scan_info.copy_scans_tsv_file_to_loris_bids_dir(
                 self.bids_sub_id, self.loris_bids_root_dir, self.data_dir
             )
             file_parameters['scans_tsv_file'] = scans_path
+            """
+            file_parameters['scans_tsv_file'] = ''
+            """END PATCH"""
             scans_blake2 = blake2b(self.scans_file.encode('utf-8')).hexdigest()
             file_parameters['scans_tsv_file_bake2hash'] = scans_blake2
 
@@ -337,12 +355,18 @@ class Mri:
         # in parameter_file
         for type in other_assoc_files:
             original_file_path = other_assoc_files[type]
+            """PATCH for UKBB -- do not copy file to local filesystem
             copied_path = self.copy_file_to_loris_bids_dir(original_file_path)
+            """
             file_param_name  = 'bids_' + type
+            """PATCH for UKBB -- use original path
             file_parameters[file_param_name] = copied_path
+            """
+            file_parameters[file_param_name] = original_file_path
+            """END PATCH"""
             file_blake2 = blake2b(original_file_path.encode('utf-8')).hexdigest()
             hash_param_name = file_param_name + '_blake2b_hash'
-            file_parameters[hash_param_name] = file_blake2
+            tfile_parameters[hash_param_name] = file_blake2
 
         # append the blake2b to the MRI file parameters dictionary
         blake2 = blake2b(nifti_file.path.encode('utf-8')).hexdigest()
@@ -364,7 +388,11 @@ class Mri:
             )
 
             # copy the NIfTI file to the LORIS BIDS import directory
+            """PATCH for UKBB - do not make a local copy of the file.""
             file_path = self.copy_file_to_loris_bids_dir(nifti_file.path)
+            """
+            file_path = nifti_file.path
+            """END PATCH """
 
             # insert the file along with its information into files and parameter_file tables
             file_info = {
@@ -380,6 +408,8 @@ class Mri:
             file_id = imaging.insert_imaging_file(file_info, file_parameters)
 
             # create the pic associated with the file
+            """PATCH for UKBB - skip pic creation for now. Apparently we already
+            have these. This should be changed later to point to their location.
             pic_rel_path = imaging.create_imaging_pic(
                 {
                     'cand_id'      : self.cand_id,
@@ -393,6 +423,7 @@ class Mri:
             if os.path.exists(self.data_dir + 'pic/' + pic_rel_path):
                 print("INNNN")
                 imaging.insert_parameter_file(file_id, 'check_pic_filename', pic_rel_path)
+            END PATCH"""
 
         return {'file_id': file_id, 'file_path': file_path}
 

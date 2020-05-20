@@ -81,9 +81,15 @@ class BidsReader:
         if self.verbose:
             print('Loading the BIDS dataset with BIDS layout library...\n')
 
-        bids_config = os.environ['LORIS_MRI'] + "/python/lib/bids.json"
+        # PATCH for UKBB: Hardcode the bids config path. LORIS_MRI is not initialized
+        # properly because the full install was not run; only the python tools are operational.
+        bids_config = '/data/loris/loris-mri/python/lib/bids.json'
+        #bids_config = os.environ['LORIS_MRI'] + "/python/lib/bids.json"
         exclude_arr = ['/code/', '/sourcedata/', '/log/', '.git/']
-        bids_layout = BIDSLayout(root=self.bids_dir, config=bids_config, ignore=exclude_arr)
+        """PATCH for UKBB - use default config and don't index
+       #bids_layout = BIDSLayout(root=self.bids_dir, config=bids_config, ignore=exclude_arr)
+        END PATCH"""
+        bids_layout = BIDSLayout(root=self.bids_dir, index_metadata=False, ignore=exclude_arr)
 
         if self.verbose:
             print('\t=> BIDS dataset loaded with BIDS layout\n')
@@ -173,6 +179,14 @@ class BidsReader:
 
         for row in self.participants_info:
             ses = self.bids_layout.get_sessions(subject=row['participant_id'])
+            """PATCH for UKBB: Convert session IDs. This is to create Visit_labels
+            that will match those used in LORIS.
+            Later, these will be converted back so that the folder structure in LORIS will
+            match the original folder structure in squashfs.
+                '2' = 'img'
+                '3' = 'irep1'
+            ses[:] = ['img' if x=='2' else 'irep1' if x=='3' else x for x in ses]
+            END PATCH """
             cand_sessions[row['participant_id']] = ses
 
         if self.verbose:
@@ -201,6 +215,7 @@ class BidsReader:
         cand_session_modalities_list = []
 
         for subject, visit_list in self.cand_sessions_list.items():
+            print(visit_list)
             cand_session_dict = {'bids_sub_id': subject}
             if visit_list:
                 for visit in visit_list:
