@@ -140,8 +140,8 @@ class BidsReader:
         bids_list = []
         with open(self.csv_file, newline='') as csvfile:
             reader = csv.DictReader(csvfile)
-            bids_list.append(reader)
-
+            for row in reader:
+                bids_list.append(row)
         return bids_list
 
     def load_candidates_from_bids(self):
@@ -182,11 +182,11 @@ class BidsReader:
 
         if self.verbose:
             print('\t=> List of participants found:')
-            for participant in participants_info:
+            for participant in participants_info_list:
                 print('\t\t' + participant['participant_id'])
             print('\n')
 
-        return participants_info
+        return participants_info_list
 
     def candidates_list_validation(self, participants_info):
         """
@@ -306,7 +306,6 @@ class BidsReader:
         #     cand_session_modalities_list.append(cand_session_dict)
 
         for subject, visit_list in self.cand_sessions_list.items():
-            print(visit_list)
             cand_session_dict = {'bids_sub_id': subject}
             for visit in visit_list:
                 cand_session_dict['bids_ses_id'] = visit
