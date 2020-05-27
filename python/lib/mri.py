@@ -244,6 +244,7 @@ class Mri:
         #     )
 
         files = []
+        print(self.bids_layout)
         for file_dict in self.bids_layout:
             sub_id = file_dict['participant_id']
             ses_id = file_dict['visit_label']
@@ -251,6 +252,7 @@ class Mri:
             if sub_id != self.bids_sub_id and ses_id != self.bids_ses_id and mod != self.bids_modality:
                 continue
             files.append(file_dict)
+        return files
 
         """END PATCH"""
 
@@ -297,7 +299,7 @@ class Mri:
         # dir       = entities['dir']         if 'dir' in entities         else None
 
         # loop through the associated files to grep JSON, bval, bvec...
-        #json_file = None
+        json_file = None
         # no other associated files for UKBB
         # other_assoc_files = {}
         # for assoc_file in associated_files:

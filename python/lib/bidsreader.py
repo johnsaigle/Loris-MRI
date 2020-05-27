@@ -312,10 +312,12 @@ class BidsReader:
                 modalities_list = []
                 for csv_dict in self.bids_layout:
                     if csv_dict['participant_id'] != subject and csv_dict['visit_label'] != visit:
+                        print('continuing')
                         continue
                     if csv_dict['modality'] not in modalities_list:
                         modalities_list.append(csv_dict['modality'])
                 cand_session_dict['modalities'] = modalities_list
+                cand_session_modalities_list.append(cand_session_dict)
         """END PATCH"""
 
         if self.verbose:
